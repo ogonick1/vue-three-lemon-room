@@ -1,6 +1,13 @@
 <!-- src/components/VirtualRoom.vue -->
 <template>
   <div ref="wrap" class="three-wrap">
+    <!-- Loader overlay -->
+    <div v-if="isLoading" class="loader-overlay">
+      <div class="spinner"></div>
+      <div class="loader-text">Loading {{ progress }}%</div>
+    </div>
+
+    <!-- HUD -->
     <div class="hud">
       <div class="hud-inner">
         <h2>Lemon Tree Room</h2>
@@ -25,67 +32,33 @@ let resizeObserver
 let roomMesh, floorMesh, treeGroup
 let timeline
 
-/* -------------------------- helpers -------------------------- */
-function fibonacciPoints(n, radius = 1, yClamp = [ -1, 1 ]) {
-  // рівномірно розкидає точки по сфері (для листя/лимонів)
-  const pts = []
-  const offset = (yClamp[1] - yClamp[0]) / n
-  const inc = Math.PI * (3 - Math.sqrt(5)) // золотий кут
-  for (let i = 0; i < n; i++) {
-    const y = yClamp[0] + i * offset + offset * 0.5
-    const r = Math.sqrt(1 - y * y)
-    const phi = i * inc
-    const x = Math.cos(phi) * r
-    const z = Math.sin(phi) * r
-    pts.push(new THREE.Vector3(x * radius, y * radius, z * radius))
-  }
-  return pts
-}
-
-function rand(a, b) { return a + Math.random() * (b - a) }
+// ---- Loader state ----
+const isLoading = ref(true)
+const progress = ref(0)
+let loadingManager, texLoader
 
 // mouse tilt state
 const pointer = { x: 0, y: 0, targetX: 0, targetY: 0 }
-const MAX_TILT = 0.18; // ~10° у радіанах
+const MAX_TILT = 0.18; // ~10°
 
 function onMouseMove(e) {
   if (!wrap.value) return
   const r = wrap.value.getBoundingClientRect()
-  // нормалізуємо позицію курсора в межах секції [-1..1]
   const nx = ((e.clientX - r.left) / r.width) * 2 - 1
   const ny = ((e.clientY - r.top) / r.height) * 2 - 1
-  // обмеження на випадок виходу за межі
   pointer.targetX = Math.max(-1, Math.min(1, nx))
   pointer.targetY = Math.max(-1, Math.min(1, ny))
 }
+function onMouseLeave() { pointer.targetX = 0; pointer.targetY = 0 }
 
-function onMouseLeave() {
-  // плавно повертаємось у центр
-  pointer.targetX = 0
-  pointer.targetY = 0
-}
-
-onMounted(() => {
-  // ...
-  wrap.value.addEventListener('mousemove', onMouseMove)
-  wrap.value.addEventListener('mouseleave', onMouseLeave)
-  // ...
-})
-
-onBeforeUnmount(() => {
-  // ...
-  wrap.value?.removeEventListener('mousemove', onMouseMove)
-  wrap.value?.removeEventListener('mouseleave', onMouseLeave)
-  // ...
-})
-
+/* -------------------------- helpers -------------------------- */
+function rand(a, b) { return a + Math.random() * (b - a) }
 
 /* -------------------------- scene parts -------------------------- */
 function createRoom() {
   // Розмір кімнати
   const W = 40, H = 14, D = 40;
 
-  const loader = new THREE.TextureLoader();
   const paths = {
     px: '/textures/walls/px.jpg',
     nx: '/textures/walls/nx.jpg',
@@ -95,13 +68,12 @@ function createRoom() {
     nz: '/textures/walls/nz.jpg'
   };
 
-  // Завантажуємо 6 текстур
+  // Завантажуємо 6 текстур (СПІЛЬНИЙ loader з менеджером)
   const tex = {};
   Object.entries(paths).forEach(([k, url]) => {
-    const t = loader.load(url);
-    t.colorSpace = THREE.SRGBColorSpace;         // коректна передача кольору
+    const t = texLoader.load(url);
+    t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy?.() || 8);
-    // приклад масштабу/повтору: t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1,1);
     tex[k] = t;
   });
 
@@ -121,8 +93,6 @@ function createRoom() {
   scene.add(roomMesh);
 }
 
-
-
 function createFloor() {
   const floorGeo = new THREE.CircleGeometry(12, 128)
   const floorMat = new THREE.MeshStandardMaterial({
@@ -130,6 +100,7 @@ function createFloor() {
   })
   floorMesh = new THREE.Mesh(floorGeo, floorMat)
   floorMesh.rotation.x = -Math.PI / 2
+  floorMesh.receiveShadow = true
   scene.add(floorMesh)
 
   // світна інкрустація
@@ -150,10 +121,9 @@ function createLemonTree() {
   const trunk = new THREE.Mesh(trunkGeo, trunkMat)
   trunk.position.y = 1.8
   trunk.castShadow = true
-  trunk.receiveShadow = false
   treeGroup.add(trunk)
 
-  /* --- a few decorative branches --- */
+  /* --- branches --- */
   const branches = new THREE.Group()
   const branchMat = new THREE.MeshStandardMaterial({ color: 0x644123, roughness: 0.9 })
   for (let i = 0; i < 7; i++) {
@@ -170,7 +140,7 @@ function createLemonTree() {
   }
   treeGroup.add(branches)
 
-  /* --- crown layout helpers --- */
+  /* --- crown layout clusters --- */
   const clusters = [
     { r: 2.1, y: 2.7, w: 0.5 },
     { r: 1.8, y: 3.5, w: 0.35 },
@@ -187,11 +157,11 @@ function createLemonTree() {
     })
   }
 
-  /* --- LEAVES (Instanced, textured with alpha) --- */
+  /* --- LEAVES --- */
   const LEAF_COUNT = 400
   const [aCount, bCount, cCount] = pickCounts(LEAF_COUNT)
 
-  const leafTex = new THREE.TextureLoader().load('/textures/leaves/leaf.png')
+  const leafTex = texLoader.load('/textures/leaves/leaf.png')
   leafTex.colorSpace = THREE.SRGBColorSpace
   leafTex.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy?.() || 8)
 
@@ -217,7 +187,6 @@ function createLemonTree() {
   }
 
   const placeLeavesCluster = (cluster, count, idxStart) => {
-    // рівномірні точки по сферичній шапці (не 1 у циклі!)
     const pts = []
     const offset = (0.95 - (-0.7)) / count
     const inc = Math.PI * (3 - Math.sqrt(5))
@@ -228,7 +197,7 @@ function createLemonTree() {
       const x = Math.cos(phi) * r
       const z = Math.sin(phi) * r
       const p = new THREE.Vector3(x, y, z)
-      p.multiplyScalar(cluster.r * (1.2 + Math.random()*0.15))
+      p.multiplyScalar(cluster.r * (1.2 + Math.random()*0.2))
       p.y += cluster.y + (-0.1 + Math.random()*0.2)
       pts.push(p)
     }
@@ -250,7 +219,7 @@ function createLemonTree() {
 
   leafInst.instanceMatrix.needsUpdate = true
 
-  /* --- LEMONS (Instanced, stretched spheres) --- */
+  /* --- LEMONS --- */
   const LEMON_COUNT = 50
   const lemonGeo = new THREE.SphereGeometry(0.085, 14, 14)
   const lemonMat = new THREE.MeshStandardMaterial({ color: 0xe7c83b, roughness: 0.5, metalness: 0.15 })
@@ -268,7 +237,7 @@ function createLemonTree() {
       const x = Math.cos(phi) * r
       const z = Math.sin(phi) * r
       const p = new THREE.Vector3(x, y, z)
-      p.multiplyScalar(cluster.r * (0.9 + Math.random()*0.2))
+      p.multiplyScalar(cluster.r * (0.92 + Math.random()*0.2))
       p.y += cluster.y + (-0.12 + Math.random()*0.2)
       pts.push(p)
     }
@@ -277,7 +246,7 @@ function createLemonTree() {
       dummy.position.copy(p)
       dummy.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI*2, Math.random()*Math.PI)
       const s = 1.0 + Math.random()*0.6
-      dummy.scale.set(0.8*s, 1.45*s, 0.8*s) // еліпсоїд
+      dummy.scale.set(0.8*s, 1.45*s, 0.8*s)
       dummy.updateMatrix()
       lemonInst.setMatrixAt(idxStart + i, dummy.matrix)
     }
@@ -290,7 +259,7 @@ function createLemonTree() {
   placeLemonsCluster(clusters[2], lc, cursor)
   lemonInst.instanceMatrix.needsUpdate = true
 
-  /* --- small neon ring & underlay --- */
+  // decor
   const neon = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.02, 8, 64), new THREE.MeshBasicMaterial({ color: 0x35ff88 }))
   neon.position.y = 1.2
   treeGroup.add(neon)
@@ -305,11 +274,10 @@ function createLemonTree() {
   treeGroup.add(leavesGrp)
   scene.add(treeGroup)
 
-  // легке «дихання» крони
+  // «дихання» крони
   gsap.to(leavesGrp.rotation, { z: 0.06, duration: 2.8, yoyo: true, repeat: -1, ease: 'sine.inOut' })
   gsap.to(leavesGrp.position, { y: "+=0.06", duration: 2.8, yoyo: true, repeat: -1, ease: 'sine.inOut' })
 }
-
 
 function createLights() {
   const hemi = new THREE.HemisphereLight(0xddeeff, 0x101015, 0.8)
@@ -332,6 +300,17 @@ function createLights() {
 }
 
 function initThree() {
+  // Loading manager + shared texture loader
+  loadingManager = new THREE.LoadingManager()
+  loadingManager.onProgress = (url, loaded, total) => {
+    progress.value = Math.round((loaded / total) * 100)
+  }
+  loadingManager.onLoad = () => {
+    // невелика затримка для естетики
+    gsap.to({}, { duration: 0.2, onComplete: () => (isLoading.value = false) })
+  }
+  texLoader = new THREE.TextureLoader(loadingManager)
+
   scene = new THREE.Scene()
   scene.fog = new THREE.Fog(0x0e0e10, 35, 60)
 
@@ -350,7 +329,6 @@ function initThree() {
   wrap.value.appendChild(renderer.domElement)
   clock = new THREE.Clock()
 }
-
 
 function onResize() {
   if (!wrap.value) return
@@ -391,7 +369,7 @@ function buildTimeline() {
 function animate() {
   const t = clock.getElapsedTime()
 
-  // згладжуємо рух курсора (інерція)
+  // mouse easing
   pointer.x += (pointer.targetX - pointer.x) * 0.08
   pointer.y += (pointer.targetY - pointer.y) * 0.08
 
@@ -400,14 +378,14 @@ function animate() {
     floorMesh.material.roughness = THREE.MathUtils.clamp(k, 0.9, 0.99)
   }
 
+  // parallax tilt of camera (applied after lookAt)
   camera.lookAt(0, 2.8, 0)
   camera.rotateX(-pointer.y * MAX_TILT)
-  camera.rotateY(-pointer.x * MAX_TILT)
+  camera.rotateY(pointer.x * MAX_TILT)
 
   renderer.render(scene, camera)
   rafId = requestAnimationFrame(animate)
 }
-
 
 /* -------------------------- lifecycle -------------------------- */
 onMounted(() => {
@@ -417,6 +395,9 @@ onMounted(() => {
   createLemonTree()
   createLights()
   onResize()
+
+  wrap.value.addEventListener('mousemove', onMouseMove)
+  wrap.value.addEventListener('mouseleave', onMouseLeave)
 
   resizeObserver = new ResizeObserver(onResize)
   resizeObserver.observe(wrap.value)
@@ -429,6 +410,9 @@ onBeforeUnmount(() => {
   if (rafId) cancelAnimationFrame(rafId)
   ScrollTrigger.getAll().forEach(st => st.kill())
   resizeObserver && resizeObserver.disconnect()
+
+  wrap.value?.removeEventListener('mousemove', onMouseMove)
+  wrap.value?.removeEventListener('mouseleave', onMouseLeave)
 
   renderer?.dispose()
   scene?.traverse(obj => {
@@ -450,8 +434,27 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100vh;
   touch-action: pan-y;
+  overflow: hidden;
 }
 
+/* Loader styles */
+.loader-overlay{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background: radial-gradient(800px 400px at 50% 60%, rgba(0,0,0,.55), rgba(0,0,0,.85));
+  z-index: 10;
+}
+.spinner{
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 4px solid rgba(255,255,255,.18);
+  border-top-color: #35ff88;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+.loader-text{ font-size:14px; letter-spacing:.3px; opacity:.85 }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+/* HUD */
 .hud{
   position:absolute;inset:0;pointer-events:none;
   display:flex;align-items:flex-start;justify-content:center;
