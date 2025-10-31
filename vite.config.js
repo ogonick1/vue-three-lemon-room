@@ -2,6 +2,6 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
-  base: '/vue-tree-lemon-room/',
+  base: process.env.VITE_BASE_URL,
   plugins: [vue()],
 })

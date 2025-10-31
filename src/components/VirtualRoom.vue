@@ -24,7 +24,7 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 const assetUrl = (rel) =>
-  new URL(`${import.meta.env.BASE_URL}${rel}`, window.location.href).pathname;
+  new URL(`${import.meta.env.VITE_BASE_URL}${rel}`, import.meta.url).href
 
 gsap.registerPlugin(ScrollTrigger)
 
