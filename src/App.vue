@@ -34,7 +34,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  // При демонтажі компонента прибираємо тригери 
+  // При демонтажі компонента прибираємо тригери
   ScrollTrigger.getAll().forEach(st => st.kill())
 })
 </script>

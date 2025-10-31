@@ -24,8 +24,7 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 const assetUrl = (rel) =>
-  new URL(`${import.meta.env.VITE_BASE_URL}${rel}`, import.meta.url).href
-
+  new URL(`${import.meta.env.BASE_URL}${rel}`, import.meta.url).href
 gsap.registerPlugin(ScrollTrigger)
 
 const wrap = ref(null)
@@ -383,7 +382,7 @@ function animate() {
   // parallax tilt of camera (applied after lookAt)
   camera.lookAt(0, 2.8, 0)
   camera.rotateX(-pointer.y * MAX_TILT)
-  camera.rotateY(pointer.x * MAX_TILT)
+  camera.rotateY(-pointer.x * MAX_TILT)
 
   renderer.render(scene, camera)
   rafId = requestAnimationFrame(animate)
