@@ -23,6 +23,9 @@ import * as THREE from 'three'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
+const assetUrl = (rel) =>
+  new URL(`${import.meta.env.BASE_URL}${rel}`, window.location.href).pathname;
+
 gsap.registerPlugin(ScrollTrigger)
 
 const wrap = ref(null)
@@ -59,23 +62,22 @@ function createRoom() {
   // Розмір кімнати
   const W = 40, H = 14, D = 40;
 
-  const paths = {
-    px: '/textures/walls/px.jpg',
-    nx: '/textures/walls/nx.jpg',
-    py: '/textures/walls/py.jpg',
-    ny: '/textures/walls/ny.jpg',
-    pz: '/textures/walls/pz.jpg',
-    nz: '/textures/walls/nz.jpg'
-  };
+const paths = {
+  px: assetUrl('textures/walls/px.jpg'),
+  nx: assetUrl('textures/walls/nx.jpg'),
+  py: assetUrl('textures/walls/py.jpg'),
+  ny: assetUrl('textures/walls/ny.jpg'),
+  pz: assetUrl('textures/walls/pz.jpg'),
+  nz: assetUrl('textures/walls/nz.jpg'),
+};
 
-  // Завантажуємо 6 текстур (СПІЛЬНИЙ loader з менеджером)
-  const tex = {};
-  Object.entries(paths).forEach(([k, url]) => {
-    const t = texLoader.load(url);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy?.() || 8);
-    tex[k] = t;
-  });
+const tex = {};
+Object.entries(paths).forEach(([k, url]) => {
+  const t = texLoader.load(url);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy?.() || 8);
+  tex[k] = t;
+});
 
   // Порядок груп у BoxGeometry: +X, -X, +Y, -Y, +Z, -Z
   const mats = [
@@ -161,9 +163,9 @@ function createLemonTree() {
   const LEAF_COUNT = 400
   const [aCount, bCount, cCount] = pickCounts(LEAF_COUNT)
 
-  const leafTex = texLoader.load('/textures/leaves/leaf.png')
-  leafTex.colorSpace = THREE.SRGBColorSpace
-  leafTex.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy?.() || 8)
+ const leafTex = texLoader.load(assetUrl('textures/leaves/leaf.png'));
+leafTex.colorSpace = THREE.SRGBColorSpace;
+leafTex.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy?.() || 8);
 
   const leafGeo = new THREE.PlaneGeometry(0.24, 0.42)
   const leafMat = new THREE.MeshStandardMaterial({
