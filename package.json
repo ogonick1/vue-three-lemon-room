@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 5174"
+    "preview": "vite preview --port 5174",
+    "deploy": "vite build && vite-gh-pages"
   },
   "dependencies": {
     "gsap": "^3.12.5",
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vite-plugin-gh-pages": "^1.0.1"
   }
 }
